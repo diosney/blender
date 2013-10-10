@@ -314,7 +314,7 @@ void DocumentExporter::exportCurrentScene(Scene *sce)
 	/* TODO: <library_physics_models> */
 	/* TODO: <library_physics_scenes> */
 
-	/* TODO: <library_visual_scenes> */
+	/* <library_visual_scenes> */
 	SceneExporter se(&sw, &arm_exporter, this->export_settings);
 
 	if (has_animations && this->export_settings->export_transformation_type == BC_TRANSFORMATION_TYPE_MATRIX) {
