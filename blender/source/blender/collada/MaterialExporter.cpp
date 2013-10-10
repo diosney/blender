@@ -25,12 +25,22 @@
  *  \ingroup collada
  */
 
-
-
-#include "MaterialExporter.h"
+/*
+ * Import COLLADA Base Utils needed libraries.
+ */
 #include "COLLADABUUtils.h"
+
+/*
+ * Blender COLLADA specific needed libraries.
+ */
 #include "collada_internal.h"
 
+/*
+ * Blender COLLADA objects exporters.
+ */
+#include "MaterialExporter.h"
+
+/* Constructor. */
 MaterialsExporter::MaterialsExporter(COLLADASW::StreamWriter *sw, const ExportSettings *export_settings) : COLLADASW::LibraryMaterials(sw), export_settings(export_settings)
 {
 	/* pass */
@@ -57,7 +67,7 @@ bool MaterialsExporter::hasMaterials(Scene *sce)
 		for (a = 0; a < ob->totcol; a++) {
 			Material *ma = give_current_material(ob, a + 1);
 
-			// no material, but check all of the slots
+			/* No material, but check all of the slots */
 			if (!ma) continue;
 
 			return true;
