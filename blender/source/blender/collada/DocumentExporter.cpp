@@ -24,12 +24,18 @@
  *  \ingroup collada
  */
 
+/*
+ * Import standard needed libraries.
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <vector>
-#include <algorithm> // std::find
+#include <algorithm> /* Needed for: std::find */
 
+/*
+ * Import COLLADA StreamWriter needed libraries.
+ */
 #include "COLLADASWCamera.h"
 #include "COLLADASWAsset.h"
 #include "COLLADASWLibraryVisualScenes.h"
@@ -62,8 +68,14 @@
 #include "COLLADASWInstanceNode.h"
 #include "COLLADASWBaseInputElement.h"
 
+/*
+ * Import Blender needed libraries.
+ */
 extern "C" 
 {
+/*
+ * Blender DNA.
+ */
 #include "DNA_scene_types.h"
 #include "DNA_object_types.h"
 #include "DNA_group_types.h"
@@ -79,6 +91,9 @@ extern "C"
 #include "DNA_modifier_types.h"
 #include "DNA_userdef_types.h"
 
+/*
+ * Blender BLI (Blender Libraries).
+ */
 #include "BLI_path_util.h"
 #include "BLI_fileops.h"
 #include "BLI_math.h"
@@ -86,11 +101,14 @@ extern "C"
 #include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
+/*
+ * Blender BKE (Blender Kernel).
+ */
 #include "BKE_DerivedMesh.h"
-#include "BKE_action.h" // pose functions
+#include "BKE_action.h" /* Needed for: Pose functions. */
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
-#include "BKE_blender.h" // version info
+#include "BKE_blender.h" /* Needed for: Version info. */
 #include "BKE_fcurve.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
@@ -109,16 +127,24 @@ extern char build_rev[];
 #include "RNA_access.h"
 }
 
+/*
+ * Blender COLLADA specific needed libraries.
+ */
 #include "collada_internal.h"
 #include "collada_utils.h"
 #include "DocumentExporter.h"
 
 extern bool bc_has_object_type(LinkNode *export_set, short obtype);
 
-// can probably go after refactor is complete
+/*
+ * TODO: Writers: Can probably go after refactor is complete.
+ */
 #include "InstanceWriter.h"
 #include "TransformWriter.h"
 
+/*
+ * Blender COLLADA objects exporters.
+ */
 #include "SceneExporter.h"
 #include "ArmatureExporter.h"
 #include "AnimationExporter.h"
@@ -141,24 +167,26 @@ char *bc_CustomData_get_layer_name(const struct CustomData *data, int type, int 
 
 char *bc_CustomData_get_active_layer_name(const CustomData *data, int type)
 {
-	/* get the layer index of the active layer of type */
+	/* Get the layer index of the active layer of type. */
 	int layer_index = CustomData_get_active_layer_index(data, type);
 	if (layer_index < 0) return NULL;
 
 	return data->layers[layer_index].name;
 }
 
+/* Constructor. */
 DocumentExporter::DocumentExporter(const ExportSettings *export_settings) : export_settings(export_settings) {
 }
 
-// TODO: it would be better to instantiate animations rather than create a new one per object
-// COLLADA allows this through multiple <channel>s in <animation>.
-// For this to work, we need to know objects that use a certain action.
-
+/*
+ * TODO: it would be better to instantiate animations rather than create a new one per object.
+ * COLLADA allows this through multiple <channel>s in <animation>.
+ * For this to work, we need to know objects that use a certain action.
+ */
 void DocumentExporter::exportCurrentScene(Scene *sce)
 {
 	PointerRNA sceneptr, unit_settings;
-	PropertyRNA *system; /* unused , *scale; */
+	PropertyRNA *system; /* TODO: Remove unused?: *scale; */
 
 	clear_global_id_map();
 	
@@ -168,16 +196,16 @@ void DocumentExporter::exportCurrentScene(Scene *sce)
 
 	fprintf(stdout, "Collada export: %s\n", this->export_settings->filepath);
 
-	// open <collada>
+	/* Open <COLLADA> */
 	sw.startDocument();
 
-	// <asset>
+	/* <asset> */
 	COLLADASW::Asset asset(&sw);
 
 	RNA_id_pointer_create(&(sce->id), &sceneptr);
 	unit_settings = RNA_pointer_get(&sceneptr, "unit_settings");
 	system = RNA_struct_find_property(&unit_settings, "system");
-	//scale = RNA_struct_find_property(&unit_settings, "scale_length");
+	/* TODO: Remove?: scale = RNA_struct_find_property(&unit_settings, "scale_length"); */
 
 	std::string unitname = "meter";
 	float linearmeasure = RNA_float_get(&unit_settings, "scale_length");
@@ -234,55 +262,66 @@ void DocumentExporter::exportCurrentScene(Scene *sce)
 	asset.add();
 	
 	LinkNode *export_set = this->export_settings->export_set;
-	// <library_cameras>
+
+	/* <library_animations> */
+	AnimationExporter ae(&sw, this->export_settings);
+	bool has_animations = ae.exportAnimations(sce);
+
+	/* TODO: <library_animation_clips> */
+
+	/* <library_cameras> */
 	if (bc_has_object_type(export_set, OB_CAMERA)) {
 		CamerasExporter ce(&sw, this->export_settings);
 		ce.exportCameras(sce);
 	}
-	
-	// <library_lights>
-	if (bc_has_object_type(export_set, OB_LAMP)) {
-		LightsExporter le(&sw, this->export_settings);
-		le.exportLights(sce);
-	}
 
-	// <library_images>
-	ImagesExporter ie(&sw, this->export_settings);
-	ie.exportImages(sce);
+	/* <library_controllers> */
+	ArmatureExporter arm_exporter(&sw, this->export_settings);
+	ControllerExporter controller_exporter(&sw , this->export_settings);
+	if (bc_has_object_type(export_set, OB_ARMATURE) || this->export_settings->include_shapekeys)
+	{
+		controller_exporter.export_controllers(sce);
+	}
 	
-	// <library_effects>
+	/* <library_effects> */
 	EffectsExporter ee(&sw, this->export_settings);
 	ee.exportEffects(sce);
-	
-	// <library_materials>
-	MaterialsExporter me(&sw, this->export_settings);
-	me.exportMaterials(sce);
 
-	// <library_geometries>
+	/* TODO: <library_force_fields> */
+
+	/* <library_geometries> */
 	if (bc_has_object_type(export_set, OB_MESH)) {
 		GeometryExporter ge(&sw, this->export_settings);
 		ge.exportGeom(sce);
 	}
 
-	// <library_animations>
-	AnimationExporter ae(&sw, this->export_settings);
-	bool has_animations = ae.exportAnimations(sce);
+	/* <library_images> */
+	ImagesExporter ie(&sw, this->export_settings);
+	ie.exportImages(sce);
 
-	// <library_controllers>
-	ArmatureExporter arm_exporter(&sw, this->export_settings);
-	ControllerExporter controller_exporter(&sw , this->export_settings);
-	if (bc_has_object_type(export_set, OB_ARMATURE) || this->export_settings->include_shapekeys) 
-	{
-		controller_exporter.export_controllers(sce);
+	/* <library_lights> */
+	if (bc_has_object_type(export_set, OB_LAMP)) {
+		LightsExporter le(&sw, this->export_settings);
+		le.exportLights(sce);
 	}
 
-	// <library_visual_scenes>
+	/* <library_materials> */
+	MaterialsExporter me(&sw, this->export_settings);
+	me.exportMaterials(sce);
 
+	/* TODO: <library_nodes> */
+	/* TODO: <library_physics_materials> */
+	/* TODO: <library_physics_models> */
+	/* TODO: <library_physics_scenes> */
+
+	/* TODO: <library_visual_scenes> */
 	SceneExporter se(&sw, &arm_exporter, this->export_settings);
 
 	if (has_animations && this->export_settings->export_transformation_type == BC_TRANSFORMATION_TYPE_MATRIX) {
-		// channels adressing <matrix> objects is not (yet) supported
-		// So we force usage of <location>, <translation> and <scale>
+		/*
+		 * Channels adressing <matrix> objects is not (yet) supported.
+		 * So we force usage of <location>, <translation> and <scale>
+		 */
 		fprintf(stdout, 
 			"For animated Ojects we must use decomposed <matrix> elements,\n" \
 			"Forcing usage of TransLocRot transformation type.");
@@ -294,17 +333,20 @@ void DocumentExporter::exportCurrentScene(Scene *sce)
 
 	se.exportScene(sce);
 	
-	// <scene>
+	/* <scene> */
 	std::string scene_name(translate_id(id_name(sce)));
 	COLLADASW::Scene scene(&sw, COLLADASW::URI(COLLADABU::Utils::EMPTY_STRING,
 	                                           scene_name));
 	scene.add();
 	
-	// close <Collada>
+	/* Close <COLLADA> */
 	sw.endDocument();
-
 }
 
+/*
+ * TODO: Check with @jesterKing if this function will be finally removed.
+ * I (@diosney) think all unused code have to be removed.
+ */
 void DocumentExporter::exportScenes(const char *filename)
 {
 }
